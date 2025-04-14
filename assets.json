@@ -1,0 +1,102 @@
+[
+  {
+    "name": "Dogecoin",
+    "price": 0.160851,
+    "previousPrice": 0.160914,
+    "history": [
+      0.160914,
+      0.160914,
+      0.160851
+    ]
+  },
+  {
+    "name": "Bitcoin",
+    "price": 84475,
+    "previousPrice": 84511,
+    "history": [
+      84511,
+      84511,
+      84475
+    ]
+  },
+  {
+    "name": "Emas",
+    "price": 30,
+    "previousPrice": 30,
+    "history": [
+      30,
+      30,
+      30
+    ]
+  },
+  {
+    "name": "Ethereum",
+    "price": 1630.18,
+    "previousPrice": 1631.03,
+    "history": [
+      1631.03,
+      1631.03,
+      1630.18
+    ]
+  },
+  {
+    "name": "Litecoin",
+    "price": 76.49,
+    "previousPrice": 76.55,
+    "history": [
+      76.55,
+      76.55,
+      76.49
+    ]
+  },
+  {
+    "name": "USD",
+    "price": 1,
+    "previousPrice": 1,
+    "history": [
+      1,
+      1,
+      1
+    ]
+  },
+  {
+    "name": "IDR",
+    "price": 16807.82,
+    "previousPrice": 16807.82,
+    "history": [
+      16807.82,
+      16807.82,
+      16807.82
+    ]
+  },
+  {
+    "name": "JPY",
+    "price": 143.73,
+    "previousPrice": 143.73,
+    "history": [
+      143.73,
+      143.73,
+      143.73
+    ]
+  },
+  {
+    "name": "CNY",
+    "price": 7.29,
+    "previousPrice": 7.29,
+    "history": [
+      7.29,
+      7.29,
+      7.29
+    ]
+  },
+  {
+    "name": "SGD",
+    "price": 1.32,
+    "previousPrice": 1.32,
+    "history": [
+      1.32,
+      1.32,
+      1.32
+    ]
+  }
+]

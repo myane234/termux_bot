@@ -1,0 +1,23 @@
+{
+  "name": "bot-tag",
+  "version": "1.0.0",
+  "main": "index.js",
+  "bin": "secure.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "Myane",
+  "license": "ISC",
+  "description": "beta version of bot tag",
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.17.16",
+    "axios": "^1.8.4",
+    "ffmpeg": "^0.0.4",
+    "fluent-ffmpeg": "^2.1.3",
+    "qrcode-terminal": "^0.12.0",
+    "sharp": "^0.32.6",
+    "wa-sticker-formatter": "^4.4.4",
+    "ytdl-core": "^4.11.5"
+  }
+}
