@@ -39,13 +39,11 @@
   "6285773649235@s.whatsapp.net": {
     "level": 2,
     "exp": 50,
-    "money": 14974.840000096709,
+    "money": 0.8400000967085361,
     "job": "Kurir",
     "lastWork": null,
     "missedDays": 0,
-    "assets": {
-      "Bitcoin": 322
-    },
+    "assets": {},
     "absenDate": "Mon Apr 14 2025",
     "absenCount": 3,
     "dailyEarnings": 45
@@ -137,7 +135,7 @@
   "6281390385721@s.whatsapp.net": {
     "level": 2,
     "exp": 30,
-    "money": 105941744.50289917,
+    "money": 804839.5,
     "job": "Kurir",
     "lastWork": null,
     "missedDays": 0,
@@ -147,7 +145,7 @@
     "assets": {
       "Ethereum": 1004,
       "Dogecoin": 100,
-      "Bitcoin": 121298
+      "Bitcoin": 122549
     }
   },
   "62882001684643@s.whatsapp.net": {
@@ -186,7 +184,7 @@
   "6285810192529@s.whatsapp.net": {
     "level": 1,
     "exp": 0,
-    "money": 2999,
+    "money": 2799,
     "job": null,
     "lastWork": null,
     "missedDays": 0

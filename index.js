@@ -16,10 +16,14 @@ const kerang = require("./plugins/kerang");
 const kontol = require('./plugins/kontol');
 const { handleAntiLink, antiLinkConfig } = require("./plugins/antilink");
 const handleGroupCommands = require("./plugins/saran");
-const handleToImg = require("./plugins/toimg");
+const handleWelcome = require("./plugins/welcome");
+const  handleGetPP  = require("./plugins/getpp");
+const { ping } = require("./plugins/ping");
+const adminPlugin = require('./plugins/admin.js'); 
 
 const MAX_MONEY = 1000000000; // Batas maksimum uang ($1 miliar)
 const assetDataFile = "assets.json";
+const welcomeConfig = {};
 
 // File untuk menyimpan data pengguna
 const userDataFile = "userData.json";
@@ -405,6 +409,15 @@ class WerewolfGame {
     );
   
     if (result[0]) {
+      console.log(`🔍 Memeriksa ID pemain: ${result[0]}`);
+      if (!userData[result[0]]) {
+        console.error(`❌ ID ${result[0]} tidak ditemukan di userData.`);
+        await sock.sendMessage(chatId, {
+          text: `❌ Data pemain dengan ID ${result[0]} tidak ditemukan.`,
+        });
+        return;
+      }
+  
       this.players[result[0]].alive = false;
       await sock.sendMessage(chatId, {
         text: `⚰️ ${this.usernameMap[result[0]]} telah dieliminasi.`,
@@ -417,16 +430,14 @@ class WerewolfGame {
         });
   
         // Berikan hadiah kepada Joker
-        if (userData[result[0]]) {
-          const rewardMoney = 100;
-          const rewardExp = 50;
-          userData[result[0]].money += rewardMoney;
-          userData[result[0]].exp += rewardExp;
+        const rewardMoney = 100;
+        const rewardExp = 50;
+        userData[result[0]].money += rewardMoney;
+        userData[result[0]].exp += rewardExp;
   
-          await sock.sendMessage(chatId, {
-            text: `💰 Joker (${this.usernameMap[result[0]]}) mendapatkan hadiah $${rewardMoney} dan ${rewardExp} EXP!`,
-          });
-        }
+        await sock.sendMessage(chatId, {
+          text: `💰 Joker (${this.usernameMap[result[0]]}) mendapatkan hadiah $${rewardMoney} dan ${rewardExp} EXP!`,
+        });
   
         return this.resetGame();
       }
@@ -461,6 +472,8 @@ class WerewolfGame {
           await sock.sendMessage(chatId, {
             text: `💰 ${this.usernameMap[winnerId]} mendapatkan hadiah $${rewardMoney} dan ${rewardExp} EXP!`,
           });
+        } else {
+          console.log(`❌ Pemain ${winnerId} tidak memiliki akun.`);
         }
       }
   
@@ -618,6 +631,10 @@ async function startBot() {
 
   let currentQuestion = null;
   let currentAnswer = null;
+  sock.ev.on("group-participants.update", async (update) => {
+    console.log("🔔 Update peserta grup:", update);
+    await handleWelcome(sock, update, welcomeConfig);
+  });
 
   // pesan masuk
   sock.ev.on("messages.upsert", async (m) => {
@@ -700,11 +717,23 @@ async function startBot() {
         });
       }
 
+      if (body.toLowerCase() === "!ping") {
+        await ping(sock, from);  // Panggil plugin
+        return;
+      }
+
       // !menu
       if (body.startsWith("!menu")) {
         console.log("✅ Perintah !menu diterima, memproses...");
         try {
           const imageBuffer = fs.readFileSync("assets/menu-img.jpg");
+
+          const welcomeStatus = isGroup
+          ? welcomeConfig[from]?.enabled
+            ? "Aktif ✅"
+            : "Nonaktif ❌"
+          : "Tidak berlaku (bukan grup)";
+    
       
           // Periksa status anti-link untuk grup ini
           const antiLinkStatus = isGroup
@@ -753,22 +782,30 @@ async function startBot() {
       
       ִֶָ☾ *Game*:
          - !mtk → Bermain tebak-tebakan matematika.
-         - !a [jawaban] → Menjawab tebak-tebakan matematika.
+         - .a [jawaban] → Menjawab tebak-tebakan matematika.
          - !cekkontol [@tag] → Melihat ukuran kontol pengguna lain.
          - !kerang [pertanyaan] → Tanya kerang ajaib.
       
       ִֶָ☾ *Fitur*:
          - !dwd [url] → Download video dari URL yang diberikan.
          - .s → Mengubah gambar atau video menjadi stiker.
+         -!getpp @tag → Mengambil foto profil pengguna.
       
       ִֶָ☾ *Admin*:
          - !topup [jumlah] [@tag atau nomor] → Menambahkan uang ke akun pengguna (admin saja).
-         -!antilink [on/off] → Mengatur status anti-link grup (admin saja).
-          -!kick [@tag] → Mengeluarkan pengguna dari grup (admin saja).
+         -!wc on/off → Mengaktifkan/menonaktifkan welcome message (admin saja).
+          -!antilink on/off → Mengaktifkan/menonaktifkan anti-link (admin saja).
+          -!wc set [pesan] → Mengatur pesan welcome (admin saja).
+          -!mute @tag → Mute pengguna (admin saja).
+          -!unmute @tag → Unmute pengguna (admin saja).
+          !antimute @tag → Anti mute pengguna (admin saja).
+          -!listmute → Melihat daftar pengguna yang di-mute (admin saja).
+          -!add 62 or +62 [nomor] → Menambahkan pengguna ke grup (admin saja).
+          -!kick @tag → Mengeluarkan pengguna dari grup (admin saja).
       
-      「  A N T I - L I N K  」
-      Status Anti-Link: ${antiLinkStatus}
-      Gunakan perintah *!antilink [on/off]* untuk mengatur fitur ini (admin saja).
+     「  S T A T U S  」
+- Welcome: ${welcomeStatus}
+- Anti-Link: ${antiLinkStatus}
       `;
       
           await sock.sendMessage(from, {
@@ -908,7 +945,6 @@ await sock.sendMessage(from, {
         }
       }
 
-
      
       if (body.startsWith('!kerang')) {
         await kerang(sock, msg, body); // kerang
@@ -918,6 +954,74 @@ await sock.sendMessage(from, {
       await kontol(sock, msg, body);
   }
 
+  if (body.startsWith("!admin") || body.startsWith("!unadmin")) {
+    await adminPlugin.execute(sock, msg, body);  // Menjalankan plugin admin
+  }
+
+  if (body.startsWith("!wc")) {
+    console.log("✅ Perintah !wc diterima, memproses...");
+    try {
+      if (!isGroup) {
+        await sock.sendMessage(from, {
+          text: "❌ Perintah ini hanya dapat digunakan di grup.",
+        });
+        return;
+      }
+  
+      const groupMetadata = await sock.groupMetadata(from);
+      const isAdmin = groupMetadata.participants.some(
+        (p) =>
+          p.id === senderId &&
+          (p.admin === "admin" || p.admin === "superadmin")
+      );
+  
+      if (!isAdmin) {
+        await sock.sendMessage(from, {
+          text: "❌ Perintah ini hanya dapat digunakan oleh admin grup.",
+        });
+        return;
+      }
+  
+      const args = body.split(" ");
+      if (args[1] === "on") {
+        welcomeConfig[from] = welcomeConfig[from] || {};
+        welcomeConfig[from].enabled = true;
+        await sock.sendMessage(from, {
+          text: "✅ Fitur welcome telah diaktifkan untuk grup ini.",
+        });
+      } else if (args[1] === "off") {
+        welcomeConfig[from] = welcomeConfig[from] || {};
+        welcomeConfig[from].enabled = false;
+        await sock.sendMessage(from, {
+          text: "✅ Fitur welcome telah dinonaktifkan untuk grup ini.",
+        });
+      } else if (args[1] === "set") {
+        const customText = body.split(" ").slice(2).join(" ");
+        if (!customText) {
+          await sock.sendMessage(from, {
+            text: "❌ Harap masukkan teks welcome yang baru.",
+          });
+          return;
+        }
+  
+        welcomeConfig[from] = welcomeConfig[from] || {};
+        welcomeConfig[from].text = customText;
+        await sock.sendMessage(from, {
+          text: "✅ Teks welcome berhasil diperbarui untuk grup ini.\n\nGunakan @tag untuk menandai anggota baru.",
+        });
+      } else {
+        await sock.sendMessage(from, {
+          text: "❌ Format salah! Gunakan: !wc [on/off/set] [teks]",
+        });
+      }
+    } catch (error) {
+      console.error("❌ Gagal memproses perintah !wc:", error);
+      await sock.sendMessage(from, {
+        text: "❌ Terjadi kesalahan saat memproses perintah !wc.",
+      });
+    }
+  }
+  
 // Tangani perintah !mute, !unmute, !kick, !add, dan !listmute
 if (
   body.startsWith("!mute") ||
@@ -931,10 +1035,6 @@ if (
   await handleGroupCommands(sock, msg, body, isGroup, senderId);
 }
 
-if (body.startsWith("!toimg")) {
-  console.log("✅ Perintah !toimg diterima, memproses...");
-  await handleToImg(sock, msg, from);
-}
 // Periksa dan hapus pesan dari pengguna yang dimute
 await handleGroupCommands.checkMutedUsers(sock, msg, isGroup);
   
@@ -995,6 +1095,13 @@ if (body.startsWith("!antilink")) {
       text: "❌ Terjadi kesalahan saat memproses perintah !antilink.",
     });
   }
+}
+
+
+// !getpp
+if (body.startsWith("!getpp")) {
+  console.log("✅ Perintah !getpp diterima, memproses...");
+  await handleGetPP(sock, msg, body);
 }
 
 
@@ -1076,7 +1183,7 @@ if (body.startsWith("!antilink")) {
           currentAnswer = answer;
 
           await sock.sendMessage(from, {
-            text: `🤔 Tebak-tebakan Matematika:\n${question}\nJawab dengan benar menggunakan perintah !a [jawaban]`,
+            text: `🤔 Tebak-tebakan Matematika:\n${question}\nJawab dengan benar menggunakan perintah .a [jawaban]`,
           });
 
           console.log("✅ Tebak-tebakan Matematika berhasil dikirim!");
@@ -2099,8 +2206,8 @@ if (body.startsWith("!antilink")) {
     console.log("📸 Scan QR ini untuk login!");
   });
 
-  setInterval(fetchRealTimePrices, 50000); // 30 detik
-  setInterval(saveAssetPrices, 50000); //simpan harga 30detik 1x
+  setInterval(fetchRealTimePrices, 500000); // 30 detik
+  setInterval(saveAssetPrices, 500000); //simpan harga 30detik 1x
 }
 
 startBot();
