@@ -1,61 +1,39 @@
-// plugins/convertpdf.js
 const fs = require("fs");
-const path = require("path");
-const { exec } = require("child_process");
-const { downloadMediaMessage } = require("@whiskeysockets/baileys");
+const pdfParse = require("pdf-parse");
+const { Document, Packer, Paragraph } = require("docx");
 
-module.exports = async function handleConvert(sock, msg, body) {
-  const isReply = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
-  const quoted = msg.message.extendedTextMessage?.contextInfo;
-
-  if (!isReply || !body.startsWith("!convert")) return;
-
-  const args = body.trim().split(" ");
-  const targetFormat = args[1];
-  if (!targetFormat)
-    return sock.sendMessage(msg.key.remoteJid, { text: "❌ Format tujuan tidak boleh kosong!" }, { quoted: msg });
-
-  const mediaMsg = quoted.quotedMessage;
-  const mimeType = mediaMsg.documentMessage?.mimetype || "";
-  const ext = mimeType.split("/")[1] || "bin";
-  const fileName = `media/input_${Date.now()}.${ext}`;
-  const outputName = `media/output_${Date.now()}.${targetFormat}`;
-
+async function convertPdfToWord(filePath, outputPath) {
   try {
-    const stream = await downloadMediaMessage(
-      { message: mediaMsg },
-      "buffer",
-      {},
-      { logger: console, reuploadRequest: sock.updateMediaMessage }
-    );
+    // Baca file PDF
+    const pdfBuffer = fs.readFileSync(filePath);
+    const pdfData = await pdfParse(pdfBuffer);
 
-    fs.writeFileSync(fileName, stream);
+    // Ekstrak teks dari PDF
+    const paragraphs = pdfData.text
+      .split("\n")
+      .filter((line) => line.trim() !== "") // Hapus baris kosong
+      .map((line) => new Paragraph(line));
 
-    const cmd = `libreoffice --headless --convert-to ${targetFormat} --outdir media ${fileName}`;
-    exec(cmd, async (err, stdout, stderr) => {
-      if (err) {
-        console.error(err);
-        return sock.sendMessage(msg.key.remoteJid, { text: "❌ Gagal mengonversi dokumen." }, { quoted: msg });
-      }
-
-      const convertedFile = fs.readdirSync("media").find(f => f.includes("input_") && f.endsWith(`.${targetFormat}`));
-      if (!convertedFile) {
-        return sock.sendMessage(msg.key.remoteJid, { text: `❌ Gagal menemukan file hasil.` }, { quoted: msg });
-      }
-
-      const buffer = fs.readFileSync(path.join("media", convertedFile));
-      await sock.sendMessage(msg.key.remoteJid, {
-        document: buffer,
-        fileName: `converted.${targetFormat}`,
-        mimetype: `application/${targetFormat}`
-      }, { quoted: msg });
-
-      // Hapus file sementara
-      fs.unlinkSync(fileName);
-      fs.unlinkSync(path.join("media", convertedFile));
+    // Buat dokumen Word
+    const doc = new Document({
+      sections: [
+        {
+          properties: {},
+          children: paragraphs,
+        },
+      ],
     });
-  } catch (e) {
-    console.error(e);
-    sock.sendMessage(msg.key.remoteJid, { text: "❌ Terjadi kesalahan saat mengunduh file." }, { quoted: msg });
+
+    // Simpan file Word
+    const wordBuffer = await Packer.toBuffer(doc);
+    fs.writeFileSync(outputPath, wordBuffer);
+
+    console.log("✅ Konversi berhasil:", outputPath);
+    return outputPath;
+  } catch (err) {
+    console.error("❌ Error konversi:", err.message);
+    return null;
   }
-};
+}
+
+module.exports = { convertPdfToWord };

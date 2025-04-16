@@ -14,13 +14,14 @@ const { exec } = require("child_process");
 const { handleDownloadCommand } = require("./downloadHandler");
 const kerang = require("./plugins/kerang");
 const kontol = require('./plugins/kontol');
+const ffmpeg = require('fluent-ffmpeg');
 const { handleAntiLink, antiLinkConfig } = require("./plugins/antilink");
 const handleGroupCommands = require("./plugins/saran");
 const handleWelcome = require("./plugins/welcome");
 const  handleGetPP  = require("./plugins/getpp");
 const { ping } = require("./plugins/ping");
-const adminPlugin = require('./plugins/admin.js'); 
-const convertPdf = require("./plugins/convertpdf");
+const { convertPdfToWord } = require("./plugins/convertpdf");
+
 
 const MAX_MONEY = 1000000000; // Batas maksimum uang ($1 miliar)
 const assetDataFile = "assets.json";
@@ -553,6 +554,8 @@ class WerewolfGame {
         ? "Werewolf 🐺"
         : targetId === this.seer
         ? "Seer 🔮"
+        :targetId === this.joker
+        ? "Joker 🤡"
         : "Villager 👨‍🌾";
 
     this.actions.check = true; 
@@ -782,7 +785,7 @@ async function startBot() {
          - !status → Melihat status akun Anda (level, uang, aset, dll.).
       
       ִֶָ☾ *Game*:
-         - !mtk → Bermain tebak-tebakan matematika.
+         - !mtk/hard → Bermain tebak-tebakan matematika.
          - .a [jawaban] → Menjawab tebak-tebakan matematika.
          - !cekkontol [@tag] → Melihat ukuran kontol pengguna lain.
          - !kerang [pertanyaan] → Tanya kerang ajaib.
@@ -801,6 +804,10 @@ async function startBot() {
           -!unmute @tag → Unmute pengguna (admin saja).
           !antimute @tag → Anti mute pengguna (admin saja).
           -!listmute → Melihat daftar pengguna yang di-mute (admin saja).
+          -!settime [jam] →
+          -!timelist → Melihat daftar waktu yang diatur 
+          -!convert
+          -
           -!add 62 or +62 [nomor] → Menambahkan pengguna ke grup (admin saja).
           -!kick @tag → Mengeluarkan pengguna dari grup (admin saja).
       
@@ -953,17 +960,76 @@ await sock.sendMessage(from, {
 
    
 //convert pdf
-// Di dalam sock.ev.on("messages.upsert", ...) bagian try
-await convertPdf(sock, msg, body);
+if (body.startsWith("!convert")) {
+  console.log("✅ Perintah !convert diterima, memproses...");
+  try {
+    // Periksa apakah pesan adalah reply
+    const isReply = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+    if (!isReply) {
+      await sock.sendMessage(from, {
+        text: "❌ Harap reply ke file PDF dengan perintah *!convert*.",
+      });
+      return;
+    }
+
+    const quotedMsg = msg.message.extendedTextMessage.contextInfo.quotedMessage;
+
+    // Periksa apakah file yang direply adalah PDF
+    if (!quotedMsg?.documentMessage || !quotedMsg.documentMessage.mimetype.includes("pdf")) {
+      await sock.sendMessage(from, {
+        text: "❌ File yang direply harus berupa PDF.",
+      });
+      return;
+    }
+    
+    const mediaBuffer = await downloadMediaMessage(
+      { message: quotedMsg },
+      "buffer",
+      {},
+      { logger: P({ level: "silent" }) }
+    );
+    
+    if (!mediaBuffer) {
+      await sock.sendMessage(from, {
+        text: "❌ Gagal mengunduh file PDF. Pastikan file tersedia dan coba lagi.",
+      });
+      return;
+    }
+    // Simpan file PDF sementara
+    const inputPath = "./temp/input.pdf";
+    const outputPath = "./temp/output.docx";
+    fs.writeFileSync(inputPath, mediaBuffer);
+
+    // Konversi PDF ke Word
+    const resultPath = await convertPdfToWord(inputPath, outputPath);
+    if (resultPath) {
+      await sock.sendMessage(from, {
+        document: fs.readFileSync(resultPath),
+        fileName: "converted.docx",
+        mimetype: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      }, { quoted: msg });
+
+      // Hapus file sementara
+      fs.unlinkSync(inputPath);
+      fs.unlinkSync(outputPath);
+    } else {
+      await sock.sendMessage(from, {
+        text: "❌ Gagal mengonversi PDF ke Word.",
+      });
+    }
+  } catch (err) {
+    console.error("❌ Error saat memproses perintah !convert:", err);
+    await sock.sendMessage(from, {
+      text: "❌ Terjadi kesalahan saat memproses file. Coba lagi nanti.",
+    });
+  }
+}
 
 
     if (body.toLowerCase().startsWith('!cekkontol')) {
       await kontol(sock, msg, body);
   }
 
-  if (body.startsWith("!admin") || body.startsWith("!unadmin")) {
-    await adminPlugin.execute(sock, msg, body);  // Menjalankan plugin admin
-  }
 
   if (body.startsWith("!wc")) {
     console.log("✅ Perintah !wc diterima, memproses...");
@@ -1025,6 +1091,31 @@ await convertPdf(sock, msg, body);
       console.error("❌ Gagal memproses perintah !wc:", error);
       await sock.sendMessage(from, {
         text: "❌ Terjadi kesalahan saat memproses perintah !wc.",
+      });
+    }
+  }
+
+  if (body.startsWith("!settime")) {
+    console.log("✅ Perintah !settime diterima, memproses...");
+    try {
+      await handleWelcome.setReminder(sock, from, body);
+    } catch (error) {
+      console.error("❌ Error saat memproses perintah !settime:", error);
+      await sock.sendMessage(from, {
+        text: "❌ Terjadi kesalahan saat memproses perintah !settime.",
+      });
+    }
+  }
+  
+  // Handler untuk perintah !timelist
+  if (body.startsWith("!timelist")) {
+    console.log("✅ Perintah !timelist diterima, memproses...");
+    try {
+      await handleWelcome.listReminders(sock, from);
+    } catch (error) {
+      console.error("❌ Error saat memproses perintah !timelist:", error);
+      await sock.sendMessage(from, {
+        text: "❌ Terjadi kesalahan saat memproses perintah !timelist.",
       });
     }
   }
@@ -1112,6 +1203,7 @@ if (body.startsWith("!getpp")) {
 }
 
 
+
       // Perintah !tagall (hanya di grup)
       if (isGroup && body.startsWith("!tagall")) {
         console.log("✅ Perintah !tagall diterima, memproses...");
@@ -1158,73 +1250,261 @@ if (body.startsWith("!getpp")) {
         console.log("✅ Perintah !dwd diterima, memproses...");
         await handleDownloadCommand(sock, from, body);
       }
-      // Perintah !tebakmtk
-      if (body.startsWith("!mtk")) {
-        console.log("✅ Perintah !tebakmtk diterima, memproses...");
-        try {
-          const num1 = Math.floor(Math.random() * 10) + 1;
-          const num2 = Math.floor(Math.random() * 10) + 1;
-          const operator = ["+", "-", "*", "/"][Math.floor(Math.random() * 4)];
-          let question, answer;
 
-          switch (operator) {
-            case "+":
-              question = `${num1} + ${num2}`;
-              answer = num1 + num2;
+// Timer untuk soal
+let mtkTimer = null;
+
+// Perintah !mtk
+if (body.startsWith("!mtk")) {
+  console.log("✅ Perintah !mtk diterima, memproses...");
+  try {
+    if (mtkTimer) {
+      await sock.sendMessage(from, {
+        text: "❌ Masih ada soal yang belum selesai. Tunggu hingga soal selesai atau waktu habis.",
+      });
+      return;
+    }
+
+    const isHardMode = body.includes("hard");
+    const questionTypes = isHardMode
+      ? ["cerita", "logika", "kombinasi"]
+      : ["faktorial", "prima", "linear", "berantai", "pola"];
+    const selectedType = questionTypes[Math.floor(Math.random() * questionTypes.length)];
+    let question, answer;
+
+    switch (selectedType) {
+      case "faktorial":
+        const num = Math.floor(Math.random() * 6) + 3; // Angka 3-8
+        question = `${num}! (faktorial)`;
+        answer = Array.from({ length: num }, (_, i) => i + 1).reduce((a, b) => a * b, 1);
+        break;
+
+      case "prima":
+        const primeCandidate = Math.floor(Math.random() * 50) + 1; // Angka 1-50
+        question = `Apakah ${primeCandidate} bilangan prima? (Ya/Tidak)`;
+        answer = isPrime(primeCandidate) ? "Ya" : "Tidak";
+        break;
+
+      case "linear":
+        const a = Math.floor(Math.random() * 10) + 1; // Koefisien 1-10
+        const b = Math.floor(Math.random() * 10) + 1; // Konstanta 1-10
+        const x = Math.floor(Math.random() * 10) + 1; // Nilai x 1-10
+        const c = a * x + b; // Hasil persamaan
+        question = `${a}x + ${b} = ${c}, berapa x?`;
+        answer = x;
+        break;
+
+      case "berantai":
+        const nums = Array.from({ length: 3 }, () => Math.floor(Math.random() * 10) + 1); // 3 angka acak 1-10
+        question = `${nums.join(" × ")}`;
+        answer = nums.reduce((a, b) => a * b, 1);
+        break;
+
+      case "pola":
+        const start = Math.floor(Math.random() * 5) + 1; // Awal pola 1-5
+        const multiplier = Math.floor(Math.random() * 3) + 2; // Kelipatan 2-4
+        const sequence = Array.from({ length: 4 }, (_, i) => start * Math.pow(multiplier, i));
+        question = `Berapa angka berikutnya dalam pola: ${sequence.slice(0, -1).join(", ")}?`;
+        answer = sequence[sequence.length - 1];
+        break;
+
+        case "cerita":
+          const ceritaQuestions = [
+            {
+              question: "Seorang petani memiliki 10 ayam. Setiap ayam bertelur 2 butir setiap hari. Berapa total telur dalam 5 hari?",
+              answer: 10 * 2 * 5, // 100
+            },
+            {
+              question: "Sebuah kereta api berjalan dengan kecepatan 60 km/jam selama 2 jam. Berapa jarak yang ditempuh kereta tersebut?",
+              answer: 60 * 2, // 120
+            },
+            {
+              question: "Di sebuah toko, harga 1 apel adalah $3. Jika seseorang membeli 4 apel, berapa total yang harus dibayar?",
+              answer: 3 * 4, // 12
+            },
+            {
+              question: "Seorang siswa membaca 20 halaman buku setiap hari. Jika buku tersebut memiliki 200 halaman, berapa hari yang dibutuhkan untuk menyelesaikan buku tersebut?",
+              answer: 200 / 20, // 10
+            },
+            {
+              question: "Sebuah kolam renang diisi dengan air menggunakan pompa yang mengalirkan 50 liter per menit. Berapa liter air yang akan terisi dalam 30 menit?",
+              answer: 50 * 30, // 1500
+            },
+            {
+              question: "Seorang pekerja menyelesaikan 5 tugas dalam 2 jam. Jika dia bekerja selama 8 jam, berapa banyak tugas yang dapat diselesaikan?",
+              answer: (5 / 2) * 8, // 20
+            },
+            {
+              question: "Di sebuah kebun, terdapat 15 pohon mangga. Setiap pohon menghasilkan 30 buah mangga. Berapa total buah mangga yang dihasilkan?",
+              answer: 15 * 30, // 450
+            },
+            {
+              question: "Sebuah mobil menghabiskan 8 liter bensin untuk menempuh jarak 100 km. Berapa liter bensin yang dibutuhkan untuk menempuh jarak 250 km?",
+              answer: (8 / 100) * 250, // 20
+            },
+            {
+              question: "Seorang guru memiliki 24 siswa di kelasnya. Jika setiap siswa mendapatkan 3 buku, berapa total buku yang dibutuhkan?",
+              answer: 24 * 3, // 72
+            },
+            {
+              question: "Sebuah toko menjual 12 botol air setiap jam. Berapa banyak botol air yang terjual dalam 6 jam?",
+              answer: 12 * 6, // 72
+            },
+          ];
+        
+          const selectedCerita = ceritaQuestions[Math.floor(Math.random() * ceritaQuestions.length)];
+          question = selectedCerita.question;
+          answer = selectedCerita.answer;
+          break;
+
+          case "logika":
+            const logikaQuestions = [
+              {
+                question: "Jika 3 apel + 2 jeruk = 10, dan 1 apel + 1 jeruk = 4, berapa nilai 1 apel?",
+                answer: 2, // Dari persamaan logika
+              },
+              {
+                question: "Jika 2x + 3 = 11, berapa nilai x?",
+                answer: 4, // Dari persamaan linear
+              },
+              {
+                question: "Jika 5x - 7 = 18, berapa nilai x?",
+                answer: 5, // Dari persamaan linear
+              },
+              {
+                question: "Jika 4 apel + 3 jeruk = 20, dan 2 apel + 1 jeruk = 8, berapa nilai 1 jeruk?",
+                answer: 4, // Dari persamaan logika
+              },
+              {
+                question: "Jika 2x + 5 = 15, berapa nilai x?",
+                answer: 5, // Dari persamaan linear
+              },
+              {
+                question: "Jika 6 apel + 2 jeruk = 24, dan 1 apel + 1 jeruk = 6, berapa nilai 1 apel?",
+                answer: 4, // Dari persamaan logika
+              },
+            ];
+          
+            const selectedLogika = logikaQuestions[Math.floor(Math.random() * logikaQuestions.length)];
+            question = selectedLogika.question;
+            answer = selectedLogika.answer;
+            break;
+
+            case "kombinasi":
+              const kombinasiQuestions = [
+                {
+                  question: "Berapa banyak cara memilih 2 orang dari 5 orang?",
+                  answer: 10, // Kombinasi 5C2 = 10
+                },
+                {
+                  question: "Berapa banyak cara memilih 3 orang dari 6 orang?",
+                  answer: 20, // Kombinasi 6C3 = 20
+                },
+                {
+                  question: "Berapa banyak cara memilih 4 orang dari 7 orang?",
+                  answer: 35, // Kombinasi 7C4 = 35
+                },
+                {
+                  question: "Berapa banyak cara memilih 2 orang dari 8 orang?",
+                  answer: 28, // Kombinasi 8C2 = 28
+                },
+                {
+                  question: "Berapa banyak cara memilih 3 orang dari 9 orang?",
+                  answer: 84, // Kombinasi 9C3 = 84
+                },
+              ];
+            
+              const selectedKombinasi = kombinasiQuestions[Math.floor(Math.random() * kombinasiQuestions.length)];
+              question = selectedKombinasi.question;
+              answer = selectedKombinasi.answer;
               break;
-            case "-":
-              question = `${num1} - ${num2}`;
-              answer = num1 - num2;
-              break;
-            case "*":
-              question = `${num1} * ${num2}`;
-              answer = num1 * num2;
-              break;
-            case "/":
-              question = `${num1} / ${num2}`;
-              answer = (num1 / num2).toFixed(2);
-              break;
-          }
+    }
 
-          currentQuestion = question;
-          currentAnswer = answer;
+    currentQuestion = question;
+    currentAnswer = answer;
 
-          await sock.sendMessage(from, {
-            text: `🤔 Tebak-tebakan Matematika:\n${question}\nJawab dengan benar menggunakan perintah .a [jawaban]`,
-          });
+    // Timer untuk soal
+mtkTimer = setTimeout(() => {
+  if (currentQuestion) {
+    sock.sendMessage(from, {
+      text: `⏰ Waktu habis! Soal: ${currentQuestion} tidak terjawab.`,
+    });
+  } else {
+    sock.sendMessage(from, {
+      text: "⏰ Waktu habis! Tidak ada soal aktif.",
+    });
+  }
 
-          console.log("✅ Tebak-tebakan Matematika berhasil dikirim!");
-        } catch (error) {
-          console.error("❌ Gagal mengirim tebak-tebakan matematika:", error);
-        }
-      }
+  // Hapus soal setelah waktu habis
+  currentQuestion = null;
+  currentAnswer = null;
+  mtkTimer = null;
+}, isHardMode ? 60000 : 30000); // 60 detik untuk hard, 30 detik untuk normal
 
-      // Perintah !answer
-      if (body.startsWith(".a")) {
-        console.log("✅ Perintah .a jawab diterima, memproses...");
-        try {
-          const userAnswer = parseFloat(body.split(" ")[1]);
+    await sock.sendMessage(from, {
+      text: `🤔 Tebak-tebakan Matematika (${isHardMode ? "Hard" : "Normal"}):\n${question}\nJawab dengan benar menggunakan perintah .a [jawaban] (Waktu: ${isHardMode ? "60" : "30"} detik)`,
+    });
 
-          if (userAnswer === parseFloat(currentAnswer)) {
-            await sock.sendMessage(from, {
-              text: `🎉 Jawaban benar! ${currentQuestion} = ${currentAnswer}`,
-            });
-          } else {
-            await sock.sendMessage(from, {
-              text: `❌ Jawaban salah. Coba lagi! ${currentQuestion} = ${currentAnswer}`,
-            });
-          }
+    console.log("✅ Tebak-tebakan Matematika berhasil dikirim!");
+  } catch (error) {
+    console.error("❌ Gagal mengirim tebak-tebakan matematika:", error);
+  }
+}
 
-          // Reset current question and answer
-          currentQuestion = null;
-          currentAnswer = null;
+// Fungsi untuk memeriksa bilangan prima
+function isPrime(num) {
+  if (num < 2) return false;
+  for (let i = 2; i <= Math.sqrt(num); i++) {
+    if (num % i === 0) return false;
+  }
+  return true;
+}
 
-          console.log("✅ Jawaban berhasil diproses!");
-        } catch (error) {
-          console.error("❌ Gagal memproses jawaban:", error);
-        }
-      }
+if (body.startsWith(".a")) {
+  console.log("✅ Perintah .a diterima, memproses...");
+  try {
+    const senderId = msg.key.participant || msg.key.remoteJid;
 
+    if (!userData[senderId]) {
+      await sock.sendMessage(from, {
+        text: "❌ Anda belum memiliki akun. Gunakan perintah !create untuk membuat akun.",
+      });
+      return;
+    }
+
+    if (!currentQuestion || !currentAnswer) {
+      await sock.sendMessage(from, {
+        text: "❌ Tidak ada soal aktif. Ketik !mtk untuk memulai.",
+      });
+      return;
+    }
+
+    const userAnswer = body.split(" ").slice(1).join(" ").trim();
+
+    if (userAnswer.toLowerCase() === currentAnswer.toString().toLowerCase()) {
+      const reward = Math.floor(Math.random() * (body.includes("hard") ? 100 : 50)) + 100; // Hadiah lebih besar untuk hard mode
+      userData[senderId].money = (userData[senderId].money || 0) + reward;
+
+      // Hentikan timer dan hapus soal
+      clearTimeout(mtkTimer);
+      mtkTimer = null;
+      currentQuestion = null;
+      currentAnswer = null;
+
+      await sock.sendMessage(from, { 
+        text: `🎉 Jawaban benar! Anda mendapatkan hadiah $${reward}. Total uang Anda: $${userData[senderId].money}.`,
+      });
+
+      saveUserData(); // Simpan data pengguna
+    } else {
+      await sock.sendMessage(from, {
+        text: `❌ Jawaban salah. Coba lagi!`,
+      });
+    }
+  } catch (error) {
+    console.error("❌ Gagal memproses jawaban:", error);
+  }
+}
 
       // Perintah !gelbooru
       if (body.startsWith("!nsfw")) {
@@ -2213,8 +2493,16 @@ if (body.startsWith("!getpp")) {
     console.log("📸 Scan QR ini untuk login!");
   });
 
-  setInterval(fetchRealTimePrices, 500000); // 30 detik
-  setInterval(saveAssetPrices, 500000); //simpan harga 30detik 1x
+  setInterval(fetchRealTimePrices, 3600000); // 30 detik
+  setInterval(saveAssetPrices, 3600000); //simpan harga 30detik 1x
+  setInterval(() => {
+    try {
+      handleWelcome.checkReminders(sock);
+    } catch (error) {
+      console.error("❌ Error saat memeriksa pengingat:", error);
+    }
+  }, 60000); // Periksa setiap 1 menit
+  
 }
 
 startBot();

@@ -2,7 +2,7 @@
 const antiLinkConfig = {}; // Objek untuk menyimpan status anti-link per grup
 
 // Daftar kata-kata terlarang
-const forbiddenWords = ["bokep", "promosi", "judi", "porn", "sex", "AI", "ELARA", "elara", "𝐄𝐥𝐚𝐫𝐚", "𝐀𝐢", "GRUP", "TAI", "DANA GRATIS", "http", "STOK", "POLOSAN", "stok", "ANGKUT", "angkut"]; // Tambahkan kata-kata lain di sini
+const forbiddenWords = ["bokep", "promosi", "judi", "porn", "sex", "AI", "ELARA", "elara", "𝐄𝐥𝐚𝐫𝐚", "𝐀𝐢", "GRUP", "TAI", "DANA GRATIS", "http", "STOK", "POLOSAN", "stok", "ANGKUT", "angkut", "SEWA"]; // Tambahkan kata-kata lain di sini
 
 module.exports = {
   handleAntiLink: async function (sock, msg, body, isGroup, senderId) {
