@@ -20,6 +20,7 @@ const handleWelcome = require("./plugins/welcome");
 const  handleGetPP  = require("./plugins/getpp");
 const { ping } = require("./plugins/ping");
 const adminPlugin = require('./plugins/admin.js'); 
+const convertPdf = require("./plugins/convertpdf");
 
 const MAX_MONEY = 1000000000; // Batas maksimum uang ($1 miliar)
 const assetDataFile = "assets.json";
@@ -949,6 +950,12 @@ await sock.sendMessage(from, {
       if (body.startsWith('!kerang')) {
         await kerang(sock, msg, body); // kerang
     }
+
+   
+//convert pdf
+// Di dalam sock.ev.on("messages.upsert", ...) bagian try
+await convertPdf(sock, msg, body);
+
 
     if (body.toLowerCase().startsWith('!cekkontol')) {
       await kontol(sock, msg, body);
