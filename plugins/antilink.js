@@ -2,7 +2,7 @@
 const antiLinkConfig = {}; // Objek untuk menyimpan status anti-link per grup
 
 // Daftar kata-kata terlarang
-const forbiddenWords = ["bokep", "promosi", "judi", "porn", "sex", "AI", "ELARA", "elara", "𝐄𝐥𝐚𝐫𝐚", "𝐀𝐢", "GRUP", "TAI", "DANA GRATIS", "http", "STOK", "POLOSAN", "stok", "ANGKUT", "angkut", "SEWA"]; // Tambahkan kata-kata lain di sini
+const forbiddenWords = ["bokep", "promosi", "judi", "porn", "sex", "AI", "ELARA", "elara", "𝐄𝐥𝐚𝐫𝐚", "𝐀𝐢", "GRUP", "TAI", "DANA GRATIS", "STOK", "POLOSAN", "stok", "ANGKUT", "angkut", "SEWA"]; // Tambahkan kata-kata lain di sini
 
 module.exports = {
   handleAntiLink: async function (sock, msg, body, isGroup, senderId) {
@@ -14,10 +14,11 @@ module.exports = {
     const waGroupLinkRegex = /https?:\/\/chat\.whatsapp\.com\/[a-zA-Z0-9]+/; // Grup WhatsApp
     const waBroadcastLinkRegex = /https?:\/\/whatsapp\.com\/channel\/[a-zA-Z0-9]+/; // Broadcast WhatsApp
     const waMeLinkRegex = /https?:\/\/wa\.me\/[0-9]+(\?text=[^ ]+)?/; // wa.me dengan atau tanpa query
+    const httpOnlyRegex = /http:\/\/[^\s]+/gi;
 
     // Gabungkan semua regex
     const allWhatsAppLinksRegex = new RegExp(
-      `${waGroupLinkRegex.source}|${waBroadcastLinkRegex.source}|${waMeLinkRegex.source}`
+      `${waGroupLinkRegex.source}|${waBroadcastLinkRegex.source}|${waMeLinkRegex.source}|${httpOnlyRegex.source}`,
     );
 
     // Deteksi tautan WhatsApp

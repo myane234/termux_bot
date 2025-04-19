@@ -1,0 +1,20 @@
+{
+  "myaneroom": {
+    "roomName": "myaneroom",
+    "groupId": "6289604455566-1621267330@g.us",
+    "player1": "6285721829539@s.whatsapp.net",
+    "player2": "6285773649235@s.whatsapp.net",
+    "bet": 100,
+    "player1Choice": null,
+    "player2Choice": null
+  },
+  "YKL": {
+    "roomName": "YKL",
+    "groupId": "6289604455566-1621267330@g.us",
+    "player1": "62895607564446@s.whatsapp.net",
+    "player2": "6285721829539@s.whatsapp.net",
+    "bet": 99999,
+    "player1Choice": null,
+    "player2Choice": null
+  }
+}

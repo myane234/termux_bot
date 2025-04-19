@@ -21,7 +21,75 @@ const handleWelcome = require("./plugins/welcome");
 const  handleGetPP  = require("./plugins/getpp");
 const { ping } = require("./plugins/ping");
 const { convertPdfToWord } = require("./plugins/convertpdf");
+const { searchYouTube, downloadYouTube } = require("./plugins/ytplay");
+const { downloadTikTokMedia } = require("./plugins/tiktok");
+const {
+  handleSuitBot,
+  handleCreateSuit,
+  handleAcceptSuit,
+  handlePlayerChoice,
+  processDuelResult,
+  handleRoomList,
+  handleCheckWinrate,
+  loadSuitData, // Tambahkan ini
+  saveSuitData, // Tambahkan ini
+} = require("./plugins/batugunting");
 
+let youtubeSearchResults = {};
+
+const MAX_BET_AMOUNT = 10000; // Batas maksimum taruhan ($10,000)
+
+const houses = [
+  { name: "Basic House", distance: "far", price: 5000, rent: 50 },
+  { name: "Standard House", distance: "medium", price: 15000, rent: 150 },
+  { name: "Luxury House", distance: "near", price: 50000, rent: 500 },
+];
+
+const rentalListFile = "rentalList.json";
+const marketListFile = "marketList.json";
+
+let rentalList = [];
+let marketList = [];
+
+// Muat daftar rumah yang disewakan
+if (fs.existsSync(rentalListFile)) {
+  try {
+    const fileContent = fs.readFileSync(rentalListFile, "utf-8");
+    rentalList = JSON.parse(fileContent);
+    console.log("✅ Daftar rumah yang disewakan berhasil dimuat.");
+  } catch (error) {
+    console.error("❌ Gagal memuat rentalList.json:", error);
+  }
+}
+
+// Muat daftar rumah yang dijual
+if (fs.existsSync(marketListFile)) {
+  try {
+    const fileContent = fs.readFileSync(marketListFile, "utf-8");
+    marketList = JSON.parse(fileContent);
+    console.log("✅ Daftar rumah yang dijual berhasil dimuat.");
+  } catch (error) {
+    console.error("❌ Gagal memuat marketList.json:", error);
+  }
+}
+
+function saveRentalList() {
+  try {
+    fs.writeFileSync(rentalListFile, JSON.stringify(rentalList, null, 2));
+    console.log("✅ Daftar rumah yang disewakan berhasil disimpan.");
+  } catch (error) {
+    console.error("❌ Gagal menyimpan rentalList.json:", error);
+  }
+}
+
+function saveMarketList() {
+  try {
+    fs.writeFileSync(marketListFile, JSON.stringify(marketList, null, 2));
+    console.log("✅ Daftar rumah yang dijual berhasil disimpan.");
+  } catch (error) {
+    console.error("❌ Gagal menyimpan marketList.json:", error);
+  }
+}
 
 const MAX_MONEY = 1000000000; // Batas maksimum uang ($1 miliar)
 const assetDataFile = "assets.json";
@@ -64,16 +132,17 @@ let assets = [
   { name: "IDR", price: 15000, previousPrice: 15000, history: [] }, // Tambahkan IDR
   { name: "JPY", price: 1500, previousPrice: 1500, history: [] }, // Tambahkan JPY
   { name: "CNY", price: 2000, previousPrice: 2000, history: [] }, // Tambahkan CNY
-  {name: "SGD", price: 2000, previousPrice: 2000, history: []}, // Tambahkan SGD
+  { name: "SGD", price: 2000, previousPrice: 2000, history: []}, // Tambahkan SGD
+  { name: "Solana", price: 20, previousPrice: 20, history: [] },
 ];
 
 const jobConfig = {
-  "Tukang Sampah": { absencesPerDay: 1, salaryPerAbsence: 10 },
-  "Petugas Kebersihan": { absencesPerDay: 2, salaryPerAbsence: 13 },
-  Kurir: { absencesPerDay: 3, salaryPerAbsence: 15 },
-  Kasir: { absencesPerDay: 1, salaryPerAbsence: 20 },
-  Penjual: { absencesPerDay: 2, salaryPerAbsence: 25 },
-  "Asisten Kantor": { absencesPerDay: 3, salaryPerAbsence: 10 },
+  "Tukang Sampah": { absencesPerDay: 1, salaryPerAbsence: 500 },
+  "Petugas Kebersihan": { absencesPerDay: 2, salaryPerAbsence: 750 },
+  Kurir: { absencesPerDay: 3, salaryPerAbsence: 1000 },
+  Kasir: { absencesPerDay: 1, salaryPerAbsence: 1500 },
+  Penjual: { absencesPerDay: 2, salaryPerAbsence: 2000 },
+  "Asisten Kantor": { absencesPerDay: 3, salaryPerAbsence: 2500 },
 };
 function getExpForNextLevel(level) {
   return level * 100;
@@ -97,76 +166,81 @@ if (fs.existsSync(assetDataFile)) {
 
   
 async function fetchRealTimePrices() {
-    try {
-     
-      const cryptoResponse = await axios.get(
-        "https://api.coingecko.com/api/v3/simple/price",
-        {
-          params: {
-            ids: "dogecoin,bitcoin,ethereum,litecoin", 
-            vs_currencies: "usd", 
-          },
-        }
-      );
-  
-      const cryptoPrices = cryptoResponse.data;
-  
-     
-      const forexResponse = await axios.get(
-        "https://api.exchangerate-api.com/v4/latest/USD"
-      );
-  
-      const forexRates = forexResponse.data.rates;
-  
-      // Update harga aset
-      assets.forEach((asset) => {
-        const id = asset.name.toLowerCase();
-  
-        if (cryptoPrices[id]) {
+  try {
+    // Ambil harga crypto
+    const cryptoResponse = await axios.get(
+      "https://api.coingecko.com/api/v3/simple/price",
+      {
+        params: {
+          ids: "dogecoin,bitcoin,ethereum,litecoin,solana", // Tambahkan crypto lainnya jika perlu
+          vs_currencies: "usd",
+        },
+      }
+    );
+    const cryptoPrices = cryptoResponse.data;
 
-          asset.previousPrice = asset.price;
-          asset.price = cryptoPrices[id].usd;
-        } else if (id === "usd") {
-    
-          asset.previousPrice = asset.price;
-          asset.price = 1;
-        } else if (id === "idr") {
-          
-          asset.previousPrice = asset.price;
-          asset.price = forexRates.IDR; 
-        } else if (id === "jpy") {
-            asset.previousPrice = asset.price;
-            asset.price = forexRates.JPY; 
-        } else if (id === "cny") {
-            asset.previousPrice = asset.price;
-            asset.price = forexRates.CNY; 
-        } else if (id === "sgd") {
-            asset.previousPrice = asset.price;
-            asset.price = forexRates.SGD; 
-        }
-  
-     
-        if (!asset.history) {
-          asset.history = [];
-        }
-        asset.history.push(asset.price);
-  
-        
-        if (asset.history.length > 10) {
-          asset.history.shift();
-        }
-      });
-  
-      console.log("✅ Harga aset diperbarui secara real-time:", assets);
-    } catch (error) {
-      console.error("❌ Gagal memperbarui harga aset secara real-time:", error);
-    }
+    // Ambil harga currency
+    const forexResponse = await axios.get(
+      "https://api.exchangerate-api.com/v4/latest/USD"
+    );
+    const forexRates = forexResponse.data.rates;
+
+    // Update harga aset
+    assets.forEach((asset) => {
+      const id = asset.name.toLowerCase();
+
+      if (cryptoPrices[id]) {
+        // Update harga crypto
+        asset.previousPrice = asset.price;
+        asset.price = cryptoPrices[id].usd;
+      } else if (id === "usd") {
+        asset.previousPrice = asset.price;
+        asset.price = 1;
+      } else if (id === "idr") {
+        asset.previousPrice = asset.price;
+        asset.price = forexRates.IDR;
+      } else if (id === "jpy") {
+        asset.previousPrice = asset.price;
+        asset.price = forexRates.JPY;
+      } else if (id === "cny") {
+        asset.previousPrice = asset.price;
+        asset.price = forexRates.CNY;
+      } else if (id === "sgd") {
+        asset.previousPrice = asset.price;
+        asset.price = forexRates.SGD;
+      }
+
+      // Simpan riwayat harga
+      if (!asset.history) {
+        asset.history = [];
+      }
+      asset.history.push(asset.price);
+
+      // Batasi riwayat harga hingga 10 entri
+      if (asset.history.length > 10) {
+        asset.history.shift();
+      }
+    });
+
+    console.log("✅ Harga aset diperbarui secara real-time:", assets);
+  } catch (error) {
+    console.error("❌ Gagal memperbarui harga aset secara real-time:", error);
   }
+}
 
 function saveAssetPrices() {
   try {
-    fs.writeFileSync(assetDataFile, JSON.stringify(assets, null, 2));
-    console.log("✅ Harga aset dan riwayat berhasil disimpan ke file.");
+    const currentData = JSON.stringify(assets, null, 2);
+    const previousData = fs.existsSync(assetDataFile)
+      ? fs.readFileSync(assetDataFile, "utf-8")
+      : "";
+
+    if (currentData !== previousData) {
+      fs.writeFileSync(assetDataFile, currentData);
+      console.log("✅ Harga aset dan riwayat berhasil disimpan ke file.");
+    } else {
+      console.log("ℹ️ Tidak ada perubahan pada harga aset, tidak perlu menyimpan.");
+    }
   } catch (error) {
     console.error("❌ Gagal menyimpan harga aset ke file:", error);
   }
@@ -768,6 +842,14 @@ async function startBot() {
          - !listjob → Melihat daftar pekerjaan yang tersedia.
          - !job [nomor] → Memilih pekerjaan.
          - !work → Absen harian untuk mendapatkan gaji.
+         -!listrumah → Melihat daftar rumah yang tersedia.
+         -!belirumah [nomer]  → Membeli rumah.
+          -!pilihrumah [nomer]  → Memilih rumah.
+          -!sewarumah [nomer]  → Menyewa rumah.
+          -!pasarrumah -→ Melihat daftar rumah yang dijual.
+          -!rentlist → Melihat daftar rumah yang disewakan.
+          -!rent [nomer]  → Menyewa rumah.
+          -!buy [nomer]  → Membeli rumah di pasar rumah.
       
       ִֶָ☾ *Investasi*:
          - !harga → Melihat harga aset saat ini.
@@ -789,10 +871,13 @@ async function startBot() {
          - .a [jawaban] → Menjawab tebak-tebakan matematika.
          - !cekkontol [@tag] → Melihat ukuran kontol pengguna lain.
          - !kerang [pertanyaan] → Tanya kerang ajaib.
+         -!suit taruhan batu/gunting/kertas → Bermain suit.
       
       ִֶָ☾ *Fitur*:
          - !dwd [url] → Download video dari URL yang diberikan.
+         -!play namalagu → !dl {nomer} → Download lagu dari query yang diberikan.
          - .s → Mengubah gambar atau video menjadi stiker.
+         -!ig [url] → Mengambil foto/video dari URL yang diberikan.
          -!getpp @tag → Mengambil foto profil pengguna.
       
       ִֶָ☾ *Admin*:
@@ -1202,8 +1287,225 @@ if (body.startsWith("!getpp")) {
   await handleGetPP(sock, msg, body);
 }
 
+//yt search
+if (body.startsWith("!play") || body.startsWith("!yt")) {
+  console.log("✅ Perintah !play diterima, memproses...");
+  try {
+    const query = body.split(" ").slice(1).join(" ");
+    if (!query) {
+      await sock.sendMessage(from, {
+        text: "❌ Harap masukkan kata kunci pencarian. Contoh: !play tentang kita",
+      });
+      return;
+    }
+
+    // Tampilkan pesan sedang mencari
+    await sock.sendMessage(from, { 
+      text: "🔍 Mencari video di YouTube... Mohon tunggu..." 
+    });
+
+    const results = await searchYouTube(query);
+    if (results.length === 0) {
+      await sock.sendMessage(from, {
+        text: "❌ Tidak ada hasil pencarian untuk kata kunci tersebut.",
+      });
+      return;
+    }
+
+    // Simpan hasil pencarian
+    youtubeSearchResults[from] = results;
+
+    // Format hasil pencarian
+    let resultText = "🎵 *Hasil Pencarian YouTube:*\n\n";
+    results.slice(0, 10).forEach((video) => {
+      resultText += `*${video.index}. ${video.title}*\n`;
+      resultText += `⏱️ Durasi: ${video.duration || "Tidak diketahui"}\n`;
+      resultText += `👁️ Views: ${video.views || "Tidak diketahui"}\n`;
+      resultText += `🔗 [Link Video](${video.url})\n\n`;
+    });
+    resultText += "Ketik *!dl [nomor] [audio/video]* untuk mengunduh.\nContoh: !dl 1 audio";
+
+    await sock.sendMessage(from, { 
+      text: resultText,
+      linkPreview: { 
+        thumbnail: results[0].thumbnail,
+        title: "Hasil Pencarian YouTube",
+        description: `Menampilkan ${Math.min(results.length, 10)} hasil pencarian`
+      }
+    });
+  } catch (error) {
+    console.error("❌ Gagal memproses perintah !play:", error);
+    await sock.sendMessage(from, {
+      text: "❌ Gagal mencari video. Silakan coba lagi nanti.",
+    });
+  }
+}
+
+// YouTube Download Handler
+if (body.startsWith("!dl") || body.startsWith("!download")) {
+  console.log("✅ Perintah !dl diterima, memproses...");
+  try {
+    const args = body.split(" ");
+    if (args.length < 3) {
+      await sock.sendMessage(from, {
+        text: "❌ Format salah! Gunakan: !dl [nomor] [audio/video]\nContoh: !dl 1 audio",
+      });
+      return;
+    }
+
+    const index = parseInt(args[1]) - 1;
+    const format = args[2].toLowerCase();
+
+    if (isNaN(index) || index < 0 || (format !== "audio" && format !== "video")) {
+      await sock.sendMessage(from, {
+        text: "❌ Format tidak valid!\nGunakan: !dl [nomor] [audio/video]\nContoh: !dl 1 video",
+      });
+      return;
+    }
+
+    const results = youtubeSearchResults[from];
+    if (!results || !results[index]) {
+      await sock.sendMessage(from, {
+        text: "❌ Nomor tidak valid atau hasil pencarian kadaluarsa.\nGunakan !play terlebih dahulu.",
+      });
+      return;
+    }
+
+    const video = results[index];
+    console.log(`⬇️ Mengunduh video: ${video.title} (${video.url})`);
+
+    const filePath = await downloadYouTube(video.url, format);
+
+    // Validasi apakah file ada
+    if (!fs.existsSync(filePath)) {
+      console.error("❌ File tidak ditemukan:", filePath);
+      await sock.sendMessage(from, {
+        text: "❌ File tidak ditemukan. Silakan coba lagi.",
+      });
+      return;
+    }
+
+    console.log(`📂 File ditemukan: ${filePath}`);
+
+    // Kirim file yang sudah diunduh
+    try {
+      if (format === "audio") {
+        console.log(`📤 Mengirim audio: ${filePath}`);
+        await sock.sendMessage(from, {
+          audio: { url: filePath },
+          mimetype: "audio/mpeg",
+          ptt: false,
+        });
+      } else if (format === "video") {
+        console.log(`📤 Mengirim video: ${filePath}`);
+        await sock.sendMessage(from, {
+          video: { url: filePath },
+          caption: `✅ Berhasil mengunduh video:\n*${video.title}*`,
+        });
+      }
+      console.log(`✅ File berhasil dikirim: ${filePath}`);
+    } catch (sendError) {
+      console.error("❌ Gagal mengirim file:", sendError);
+      await sock.sendMessage(from, {
+        text: "❌ Terjadi kesalahan saat mengirim file. Silakan coba lagi.",
+      });
+      return;
+    }
+
+    // Hapus file setelah terkirim
+    setTimeout(() => {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        console.log("🗑️ File berhasil dihapus:", filePath);
+      }
+    }, 30000);
+
+  } catch (error) {
+    console.error("❌ Gagal memproses perintah !dl:", error);
+    await sock.sendMessage(from, {
+      text: `❌ Gagal mengunduh: ${error.message}\nSilakan coba lagi atau gunakan video lain.`,
+    });
+  }
+}
 
 
+
+if (body.startsWith("!tiktok")) {
+  console.log("✅ Perintah !tiktok diterima, memproses...");
+  try {
+    const url = body.split(" ")[1];
+    if (!url) {
+      await sock.sendMessage(from, {
+        text: "❌ Harap sertakan URL TikTok. Contoh: !tiktok https://www.tiktok.com/@username/video/1234567890",
+      });
+      return;
+    }
+
+    // Tampilkan pesan sedang mengunduh
+    await sock.sendMessage(from, {
+      text: "🔍 Mengunduh media dari TikTok... Mohon tunggu...",
+    });
+
+    const downloadedFiles = await downloadTikTokMedia(url);
+
+    // Kirim file yang sudah diunduh
+    for (const filePath of downloadedFiles) {
+      const isVideo = filePath.endsWith(".mp4");
+      console.log(`📤 Mengirim ${isVideo ? "video" : "foto"}: ${filePath}`);
+      await sock.sendMessage(from, {
+        [isVideo ? "video" : "image"]: { url: filePath },
+        caption: `✅ Media berhasil diunduh dari TikTok.`,
+      });
+
+      // Hapus file setelah terkirim
+      fs.unlinkSync(filePath);
+      console.log("🗑️ File berhasil dihapus:", filePath);
+    }
+  } catch (error) {
+    console.error("❌ Gagal memproses perintah !tiktok:", error);
+    await sock.sendMessage(from, {
+      text: `❌ Terjadi kesalahan: ${error.message}`,
+    });
+  }
+}
+
+if (from.endsWith("@s.whatsapp.net")) {
+  const suitData = loadSuitData(); // Muat data room dari file JSON
+  const room = Object.values(suitData).find(
+    (r) => r.player1 === senderId || r.player2 === senderId
+  );
+
+  if (room) {
+    if (body.startsWith("!s ")) {
+      const choice = body.slice(3).trim().toLowerCase();
+      await handlePlayerChoice(sock, senderId, choice, userData);
+    } else {
+      await sock.sendMessage(from, {
+        text: "❌ Format salah! Gunakan: !s [batu/gunting/kertas].",
+      });
+    }
+    return;
+  }
+
+  await sock.sendMessage(from, {
+    text: "❌ Anda tidak sedang berada di room mana pun.",
+  });
+}
+
+if (body.startsWith("!suit ")) {
+  await handleSuitBot(sock, from, senderId, body, userData, saveUserData);
+} else if (body.startsWith("!crsuit ")) {
+  await handleCreateSuit(sock, from, senderId, body, userData);
+} else if (body.startsWith("!acc ")) {
+  await handleAcceptSuit(sock, from, senderId, body, userData);
+} else if (body.startsWith("!roomlist")) {
+  await handleRoomList(sock, from);
+} else if (from.endsWith("@s.whatsapp.net") && body.startsWith("!s ")) {
+  const choice = body.slice(3).trim().toLowerCase();
+  await handlePlayerChoice(sock, senderId, choice, userData);
+} else if (body.startsWith("!cekwr")) {
+  await handleCheckWinrate(sock, from, senderId, body, userData);
+}
       // Perintah !tagall (hanya di grup)
       if (isGroup && body.startsWith("!tagall")) {
         console.log("✅ Perintah !tagall diterima, memproses...");
@@ -1439,10 +1741,10 @@ mtkTimer = setTimeout(() => {
   currentQuestion = null;
   currentAnswer = null;
   mtkTimer = null;
-}, isHardMode ? 60000 : 30000); // 60 detik untuk hard, 30 detik untuk normal
+}, isHardMode ? 180000 : 120000); // 60 detik untuk hard, 30 detik untuk normal
 
     await sock.sendMessage(from, {
-      text: `🤔 Tebak-tebakan Matematika (${isHardMode ? "Hard" : "Normal"}):\n${question}\nJawab dengan benar menggunakan perintah .a [jawaban] (Waktu: ${isHardMode ? "60" : "30"} detik)`,
+      text: `🤔 Tebak-tebakan Matematika (${isHardMode ? "Hard" : "Normal"}):\n${question}\nJawab dengan benar menggunakan perintah .a [jawaban] (Waktu: ${isHardMode ? "2" : "1"} menit)`,
     });
 
     console.log("✅ Tebak-tebakan Matematika berhasil dikirim!");
@@ -1482,7 +1784,12 @@ if (body.startsWith(".a")) {
     const userAnswer = body.split(" ").slice(1).join(" ").trim();
 
     if (userAnswer.toLowerCase() === currentAnswer.toString().toLowerCase()) {
-      const reward = Math.floor(Math.random() * (body.includes("hard") ? 100 : 50)) + 100; // Hadiah lebih besar untuk hard mode
+      // Tentukan kisaran reward berdasarkan mode
+      const isHardMode = currentQuestion.includes("(Hard)");
+      const reward = isHardMode
+      ? Math.floor(Math.random() * (500 - 300 + 1)) + 400 // Kisaran 300-500
+      : Math.floor(Math.random() * (300 - 200 + 1)) + 300; // Kisaran 200-300
+
       userData[senderId].money = (userData[senderId].money || 0) + reward;
 
       // Hentikan timer dan hapus soal
@@ -1598,11 +1905,13 @@ if (body.startsWith(".a")) {
 
         userData[senderId] = {
           level: 1,
-          exp: 0, //add exp
-          money: 0,
+          exp: 0, // Tambahkan EXP
+          money: 200,
           job: null,
           lastWork: null,
           missedDays: 0,
+          houses: [], // Daftar rumah yang dimiliki
+          currentHouse: null, // Rumah yang sedang digunakan
         };
 
         saveUserData();
@@ -1694,16 +2003,356 @@ if (body.startsWith(".a")) {
         return;
       }
 
+      if (body.startsWith("!belirumah")) {
+        const args = body.split(" ");
+        const houseIndex = parseInt(args[1]) - 1;
+      
+        if (isNaN(houseIndex) || houseIndex < 0 || houseIndex >= houses.length) {
+          await sock.sendMessage(from, {
+            text: "❌ Nomor rumah tidak valid. Gunakan perintah !listrumah untuk melihat daftar rumah.",
+          });
+          return;
+        }
+      
+        const selectedHouse = houses[houseIndex];
+        if (user.money < selectedHouse.price) {
+          await sock.sendMessage(from, {
+            text: `❌ Uang Anda tidak cukup untuk membeli ${selectedHouse.name}. Harga: $${selectedHouse.price}.`,
+          });
+          return;
+        }
+      
+        user.money -= selectedHouse.price;
+        user.houses.push(selectedHouse.name);
+        saveUserData();
+      
+        await sock.sendMessage(from, {
+          text: `✅ Anda berhasil membeli ${selectedHouse.name} seharga $${selectedHouse.price}.`,
+        });
+      }
+
+      if (body.startsWith("!listrumah")) {
+        let houseList = "🏠 Daftar Rumah:\n";
+        houses.forEach((house, index) => {
+          houseList += `${index + 1}. ${house.name} - Harga: $${house.price}, Jarak: ${house.distance}, Sewa: $${house.rent}/hari\n`;
+        });
+      
+        await sock.sendMessage(from, { text: houseList });
+      }
+
+      if (body.startsWith("!pilihrumah")) {
+        const args = body.split(" ");
+        const houseName = args.slice(1).join(" ");
+      
+        if (!user.houses.includes(houseName)) {
+          await sock.sendMessage(from, {
+            text: `❌ Anda tidak memiliki rumah bernama ${houseName}.`,
+          });
+          return;
+        }
+      
+        user.currentHouse = houseName;
+        saveUserData();
+      
+        await sock.sendMessage(from, {
+          text: `✅ Anda sekarang tinggal di ${houseName}.`,
+        });
+      }
+
+      if (body.startsWith("!sewarumah")) {
+        const args = body.split(" ");
+        const houseName = args.slice(1).join(" ");
+      
+        if (!user.houses.includes(houseName)) {
+          await sock.sendMessage(from, {
+            text: `❌ Anda tidak memiliki rumah bernama ${houseName}.`,
+          });
+          return;
+        }
+      
+        if (user.currentHouse === houseName) {
+          await sock.sendMessage(from, {
+            text: "❌ Anda tidak bisa menyewakan rumah yang sedang Anda gunakan.",
+          });
+          return;
+        }
+      
+        const house = houses.find((h) => h.name === houseName);
+        user.money += house.rent;
+        saveUserData();
+      
+        await sock.sendMessage(from, {
+          text: `✅ Anda berhasil menyewakan ${houseName} dan mendapatkan $${house.rent}.`,
+        });
+      }
+
+      if (body.startsWith("!setrental")) {
+        const args = body.split(" ");
+        if (args.length < 3) {
+          await sock.sendMessage(from, {
+            text: "❌ Format salah! Gunakan: !setrental [nama rumah] [harga sewa]",
+          });
+          return;
+        }
+      
+        const houseName = args[1];
+        const rentPrice = parseInt(args[2]);
+      
+        if (isNaN(rentPrice) || rentPrice <= 0) {
+          await sock.sendMessage(from, {
+            text: "❌ Harga sewa harus berupa angka positif.",
+          });
+          return;
+        }
+      
+        const user = userData[senderId];
+        if (!user || !user.houses.includes(houseName)) {
+          await sock.sendMessage(from, {
+            text: `❌ Anda tidak memiliki rumah bernama ${houseName}.`,
+          });
+          return;
+        }
+      
+        if (user.houses.length < 2) {
+          await sock.sendMessage(from, {
+            text: "❌ Anda harus memiliki minimal 2 rumah untuk menyewakan salah satunya.",
+          });
+          return;
+        }
+      
+        if (user.currentHouse === houseName) {
+          await sock.sendMessage(from, {
+            text: "❌ Anda tidak bisa menyewakan rumah yang sedang Anda gunakan.",
+          });
+          return;
+        }
+      
+        // Tambahkan rumah ke daftar rental
+        rentalList.push({
+          owner: senderId,
+          houseName,
+          rentPrice,
+        });
+      
+        saveRentalList(); // Simpan ke file JSON
+      
+        await sock.sendMessage(from, {
+          text: `✅ Rumah ${houseName} berhasil dimasukkan ke daftar rental dengan harga $${rentPrice}/hari.`,
+        });
+      }
+
+      if (body.startsWith("!setjual")) {
+        const args = body.split(" ");
+        if (args.length < 3) {
+          await sock.sendMessage(from, {
+            text: "❌ Format salah! Gunakan: !setjual [nama rumah] [harga jual]",
+          });
+          return;
+        }
+      
+        const houseName = args[1];
+        const sellPrice = parseInt(args[2]);
+      
+        if (isNaN(sellPrice) || sellPrice <= 0) {
+          await sock.sendMessage(from, {
+            text: "❌ Harga jual harus berupa angka positif.",
+          });
+          return;
+        }
+      
+        const user = userData[senderId];
+        if (!user || !user.houses.includes(houseName)) {
+          await sock.sendMessage(from, {
+            text: `❌ Anda tidak memiliki rumah bernama ${houseName}.`,
+          });
+          return;
+        }
+      
+        // Tambahkan rumah ke daftar pasar
+        marketList.push({
+          owner: senderId,
+          houseName,
+          sellPrice,
+        });
+      
+        saveMarketList(); // Simpan ke file JSON
+      
+        // Hapus rumah dari daftar rumah pengguna
+        user.houses = user.houses.filter((h) => h !== houseName);
+        saveUserData();
+      
+        await sock.sendMessage(from, {
+          text: `✅ Rumah ${houseName} berhasil dimasukkan ke pasar dengan harga $${sellPrice}.`,
+        });
+      }
+
+      if (body.startsWith("!rentlist")) {
+        if (rentalList.length === 0) {
+          await sock.sendMessage(from, {
+            text: "❌ Tidak ada rumah yang tersedia untuk disewa saat ini.",
+          });
+          return;
+        }
+      
+        let list = "🏠 *Daftar Rumah yang Disewakan !rent[nomer]:*\n";
+        rentalList.forEach((rental, index) => {
+          list += `${index + 1}. Rumah: ${rental.houseName}\n   Harga: $${rental.rentPrice}/hari\n   Pemilik: ${rental.owner.replace(
+            "@s.whatsapp.net",
+            ""
+          )}\n\n`;
+        });
+      
+        await sock.sendMessage(from, { text: list });
+      }
+
+      if (body.startsWith("!rent")) {
+        const args = body.split(" ");
+        if (args.length < 2) {
+          await sock.sendMessage(from, {
+            text: "❌ Format salah! Gunakan: !rent [nomor]",
+          });
+          return;
+        }
+      
+        const rentalIndex = parseInt(args[1]) - 1;
+      
+        if (isNaN(rentalIndex) || rentalIndex < 0 || rentalIndex >= rentalList.length) {
+          await sock.sendMessage(from, {
+            text: "❌ Nomor tidak valid. Gunakan perintah !rentlist untuk melihat daftar rumah yang disewakan.",
+          });
+          return;
+        }
+      
+        const rental = rentalList[rentalIndex];
+        const user = userData[senderId];
+      
+        if (!user) {
+          await sock.sendMessage(from, {
+            text: "❌ Anda belum memiliki akun. Gunakan perintah !create untuk membuat akun.",
+          });
+          return;
+        }
+      
+        if (user.money < rental.rentPrice) {
+          await sock.sendMessage(from, {
+            text: `❌ Uang Anda tidak cukup untuk menyewa rumah ini. Biaya sewa: $${rental.rentPrice}.`,
+          });
+          return;
+        }
+      
+        // Kurangi uang penyewa dan tambahkan ke pemilik
+        user.money -= rental.rentPrice;
+        const owner = userData[rental.owner];
+        if (owner) {
+          owner.money += rental.rentPrice;
+        }
+      
+        saveUserData();
+      
+        await sock.sendMessage(from, {
+          text: `✅ Anda berhasil menyewa rumah ${rental.houseName} dengan biaya $${rental.rentPrice}.`,
+        });
+      
+        await sock.sendMessage(rental.owner, {
+          text: `💰 Rumah Anda (${rental.houseName}) telah disewa oleh ${senderId.replace(
+            "@s.whatsapp.net",
+            ""
+          )} dengan biaya $${rental.rentPrice}.`,
+        });
+      }
+
+      if (body.startsWith("!pasarrumah")) {
+        if (marketList.length === 0) {
+          await sock.sendMessage(from, {
+            text: "❌ Tidak ada rumah yang tersedia untuk dijual saat ini.",
+          });
+          return;
+        }
+      
+        let list = "🏠 *Daftar Rumah yang Dijual beli dengan !buy [nomer]:*\n";
+        marketList.forEach((market, index) => {
+          list += `${index + 1}. Rumah: ${market.houseName}\n   Harga: $${market.sellPrice}\n   Penjual: ${market.owner.replace(
+            "@s.whatsapp.net",
+            ""
+          )}\n\n`;
+        });
+      
+        await sock.sendMessage(from, { text: list });
+      }
+
+      if (body.startsWith("!buy")) {
+        const args = body.split(" ");
+        if (args.length < 2) {
+          await sock.sendMessage(from, {
+            text: "❌ Format salah! Gunakan: !buy [nomor]",
+          });
+          return;
+        }
+      
+        const marketIndex = parseInt(args[1]) - 1;
+      
+        if (isNaN(marketIndex) || marketIndex < 0 || marketIndex >= marketList.length) {
+          await sock.sendMessage(from, {
+            text: "❌ Nomor tidak valid. Gunakan perintah !pasarrumah untuk melihat daftar rumah yang dijual.",
+          });
+          return;
+        }
+      
+        const market = marketList[marketIndex];
+        const user = userData[senderId];
+      
+        if (!user) {
+          await sock.sendMessage(from, {
+            text: "❌ Anda belum memiliki akun. Gunakan perintah !create untuk membuat akun.",
+          });
+          return;
+        }
+      
+        if (user.money < market.sellPrice) {
+          await sock.sendMessage(from, {
+            text: `❌ Uang Anda tidak cukup untuk membeli rumah ini. Harga: $${market.sellPrice}.`,
+          });
+          return;
+        }
+      
+        // Kurangi uang pembeli dan tambahkan ke penjual
+        user.money -= market.sellPrice;
+        const seller = userData[market.owner];
+        if (seller) {
+          seller.money += market.sellPrice;
+          seller.houses = seller.houses.filter((h) => h !== market.houseName); // Hapus rumah dari penjual
+        }
+      
+        // Tambahkan rumah ke pembeli
+        user.houses.push(market.houseName);
+      
+        // Hapus rumah dari daftar pasar
+        marketList.splice(marketIndex, 1);
+        saveMarketList();
+        saveUserData();
+      
+        await sock.sendMessage(from, {
+          text: `✅ Anda berhasil membeli rumah ${market.houseName} seharga $${market.sellPrice}.`,
+        });
+      
+        await sock.sendMessage(market.owner, {
+          text: `💰 Rumah Anda (${market.houseName}) telah dibeli oleh ${senderId.replace(
+            "@s.whatsapp.net",
+            ""
+          )} seharga $${market.sellPrice}.`,
+        });
+      }
+
       if (body.startsWith("!work")) {
         const senderId = msg.key.participant || msg.key.remoteJid;
-
+      
         if (!userData[senderId]) {
           await sock.sendMessage(from, {
             text: "❌ Anda belum memiliki akun. Gunakan perintah !create untuk membuat akun.",
           });
           return;
         }
-
+      
         const user = userData[senderId];
         if (!user.job) {
           await sock.sendMessage(from, {
@@ -1711,70 +2360,98 @@ if (body.startsWith(".a")) {
           });
           return;
         }
-
+      
         const now = new Date();
         const today = now.toDateString();
         const jobDetails = jobConfig[user.job];
-
+      
         if (!jobDetails) {
           await sock.sendMessage(from, {
             text: "❌ Konfigurasi pekerjaan tidak ditemukan. Hubungi admin bot.",
           });
           return;
         }
-
+      
         if (!user.absenDate || user.absenDate !== today) {
           user.absenDate = today;
           user.absenCount = 0;
           user.dailyEarnings = 0;
         }
-
+      
         if (user.absenCount >= jobDetails.absencesPerDay) {
           await sock.sendMessage(from, {
             text: `❌ Anda sudah menyelesaikan semua absen hari ini (${jobDetails.absencesPerDay} kali). Coba lagi besok.`,
           });
           return;
         }
-
+      
         const salaryPerAbsence = jobDetails.salaryPerAbsence;
         const maxDailyEarnings = jobDetails.absencesPerDay * salaryPerAbsence;
-
+      
         if (user.dailyEarnings + salaryPerAbsence > maxDailyEarnings) {
           await sock.sendMessage(from, {
             text: `❌ Anda sudah mencapai batas gaji harian maksimum sebesar $${maxDailyEarnings}. Coba lagi besok.`,
           });
           return;
         }
-
-        // Tambahkan gaji, EXP, n absen
+      
+        // Tambahkan biaya transportasi berdasarkan rumah
+        const transportCosts = {
+          far: 100, // Biaya transportasi untuk rumah jauh
+          medium: 50, // Biaya transportasi untuk rumah sedang
+          near: 20, // Biaya transportasi untuk rumah dekat
+        };
+      
+        const currentHouse = user.currentHouse
+          ? houses.find((house) => house.name === user.currentHouse)
+          : null;
+      
+        const transportCost = currentHouse ? transportCosts[currentHouse.distance] : 150; // Default biaya transportasi jika tidak punya rumah
+      
+        if (user.money < transportCost) {
+          await sock.sendMessage(from, {
+            text: `❌ Uang Anda tidak cukup untuk membayar biaya transportasi sebesar $${transportCost}.`,
+          });
+          return;
+        }
+      
+        user.money -= transportCost; // Kurangi biaya transportasi
+        await sock.sendMessage(from, {
+          text: `💼 Anda membayar biaya transportasi sebesar $${transportCost}.`,
+        });
+      
+        // Tambahkan gaji, EXP, dan absen
         user.money += salaryPerAbsence;
         user.dailyEarnings += salaryPerAbsence;
         user.absenCount += 1;
-
-        const expGained = 10; // +10 exp
+      
+        const expGained = 20; // +20 EXP
         user.exp += expGained;
-
+      
         const expForNextLevel = getExpForNextLevel(user.level);
         if (user.exp >= expForNextLevel) {
           user.level += 1;
           user.exp -= expForNextLevel; // Sisa EXP setelah naik level
+          user.money += 1000; // Bonus $1000
           await sock.sendMessage(from, {
             text: `🎉 Selamat! Anda naik ke level ${user.level}!`,
           });
         }
-
+      
         saveUserData();
         await sock.sendMessage(from, {
           text: `✅ Anda telah absen sebagai ${user.job} (${user.absenCount}/${jobDetails.absencesPerDay}). Anda mendapatkan $${salaryPerAbsence} dan ${expGained} EXP. Total uang Anda: $${user.money}.`,
         });
-
-        // if absen done
+      
+        // Jika absen selesai
         if (user.absenCount === jobDetails.absencesPerDay) {
+          const dailyBonus = 500; // Bonus $500
+          user.money += dailyBonus;
           await sock.sendMessage(from, {
-            text: `🎉 Anda telah menyelesaikan semua absen hari ini sebagai ${user.job}. Kerja bagus!`,
+            text: `🎉 Anda telah menyelesaikan semua absen hari ini dan mendapatkan bonus $${dailyBonus}!`,
           });
         }
-
+      
         return;
       }
       // Perintah !status
@@ -1826,6 +2503,18 @@ if (body.startsWith(".a")) {
           assetList += "Belum memiliki aset.\n";
         }
 
+        // Tampilkan rumah
+  let houseList = "🏠 Rumah:\n";
+  if (user.houses && user.houses.length > 0) {
+    houseList += `- Rumah yang dimiliki: ${user.houses.join(", ")}\n`;
+    houseList += `- Rumah yang digunakan: ${
+      user.currentHouse || "Tidak ada"
+    }\n`;
+  } else {
+    houseList += "Belum memiliki rumah.\n";
+  }
+
+
         const targetName =
           targetId === senderId
             ? "Anda"
@@ -1846,21 +2535,22 @@ if (body.startsWith(".a")) {
             `Gaji harian: $${
               user.dailyEarnings || 0
             }/$${maxDailyEarnings}\n\n` +
-            assetList,
+            assetList +
+            houseList,
         });
         return;
       }
 
       if (body.startsWith("!judi")) {
         const senderId = msg.key.participant || msg.key.remoteJid;
-
+      
         if (!userData[senderId]) {
           await sock.sendMessage(from, {
             text: "❌ Anda belum memiliki akun. Gunakan perintah !create untuk membuat akun.",
           });
           return;
         }
-
+      
         const user = userData[senderId];
         const args = body.split(" ");
         if (args.length < 3) {
@@ -1869,35 +2559,42 @@ if (body.startsWith(".a")) {
           });
           return;
         }
-
+      
         const betAmount = parseInt(args[1]);
         const choice = args[2].toLowerCase();
-
+      
         if (isNaN(betAmount) || betAmount <= 0) {
           await sock.sendMessage(from, {
             text: "❌ Jumlah taruhan harus berupa angka positif.",
           });
           return;
         }
-
+      
+        if (betAmount > MAX_BET_AMOUNT) {
+          await sock.sendMessage(from, {
+            text: `❌ Jumlah taruhan tidak boleh lebih dari $${MAX_BET_AMOUNT}.`,
+          });
+          return;
+        }
+      
         if (betAmount > user.money) {
           await sock.sendMessage(from, {
             text: `❌ Uang Anda tidak cukup! Anda hanya memiliki $${user.money}.`,
           });
           return;
         }
-
+      
         if (choice !== "head" && choice !== "tail") {
           await sock.sendMessage(from, {
             text: "❌ Pilihan harus 'head' atau 'tail'.",
           });
           return;
         }
-
+      
         // flip coin
         const outcomes = ["head", "tail"];
         const result = outcomes[Math.floor(Math.random() * outcomes.length)];
-
+      
         if (choice === result) {
           const winnings = betAmount * 2;
           user.money += winnings;
@@ -1910,21 +2607,21 @@ if (body.startsWith(".a")) {
             text: `❌ Sayang sekali! Koin menunjukkan ${result}. Anda kalah $${betAmount}. Total uang Anda: $${user.money}.`,
           });
         }
-
+      
         saveUserData();
         return;
       }
 
       if (body.startsWith("!togel")) {
         const senderId = msg.key.participant || msg.key.remoteJid;
-
+      
         if (!userData[senderId]) {
           await sock.sendMessage(from, {
             text: "❌ Anda belum memiliki akun. Gunakan perintah !create untuk membuat akun.",
           });
           return;
         }
-
+      
         const user = userData[senderId];
         const args = body.split(" ");
         if (args.length < 3) {
@@ -1933,36 +2630,43 @@ if (body.startsWith(".a")) {
           });
           return;
         }
-
+      
         const betAmount = parseInt(args[1]);
         const chosenNumber = args[2];
-
+      
         if (isNaN(betAmount) || betAmount <= 0) {
           await sock.sendMessage(from, {
             text: "❌ Jumlah taruhan harus berupa angka positif.",
           });
           return;
         }
-
+      
+        if (betAmount > MAX_BET_AMOUNT) {
+          await sock.sendMessage(from, {
+            text: `❌ Jumlah taruhan tidak boleh lebih dari $${MAX_BET_AMOUNT}.`,
+          });
+          return;
+        }
+      
         if (betAmount > user.money) {
           await sock.sendMessage(from, {
             text: `❌ Uang Anda tidak cukup! Anda hanya memiliki $${user.money}.`,
           });
           return;
         }
-
+      
         if (!/^\d{2,4}$/.test(chosenNumber)) {
           await sock.sendMessage(from, {
             text: "❌ Angka harus berupa 2 hingga 4 digit (contoh: 12, 123, 1234).",
           });
           return;
         }
-
+      
         const randomNumber = Math.floor(Math.random() * 10000)
           .toString()
           .padStart(4, "0"); // 4 digit angka acak
         console.log(`🎲 Angka yang diundi: ${randomNumber}`);
-
+      
         // Hitung jumlah digit yang cocok tanpa memperhatikan urutan
         let matchCount = 0;
         let tempRandom = randomNumber; // Salinan untuk menghindari double count
@@ -1972,19 +2676,19 @@ if (body.startsWith(".a")) {
             tempRandom = tempRandom.replace(digit, ""); // Hindari hitungan ganda
           }
         }
-
+      
         // Hitung kemenangan berdasarkan jumlah kecocokan digit
         let winnings = 0;
         if (matchCount === 4) {
-          winnings = betAmount * 100;
+          winnings = betAmount * 20;
         } else if (matchCount === 3) {
-          winnings = betAmount * 50;
-        } else if (matchCount === 2) {
           winnings = betAmount * 10;
+        } else if (matchCount === 2) {
+          winnings = betAmount * 3;
         } else if (matchCount === 1) {
-          winnings = betAmount * 5;
+          winnings = betAmount * 2;
         }
-
+      
         // Menampilkan hasil kepada pemain
         if (winnings > 0) {
           user.money += winnings;
@@ -1997,7 +2701,7 @@ if (body.startsWith(".a")) {
             text: `❌ Sayang sekali! Angka yang diundi: ${randomNumber}\n Anda kalah $${betAmount}\n Total uang Anda: $${user.money}.`,
           });
         }
-
+      
         saveUserData();
         return;
       }
@@ -2493,8 +3197,18 @@ if (body.startsWith(".a")) {
     console.log("📸 Scan QR ini untuk login!");
   });
 
-  setInterval(fetchRealTimePrices, 3600000); // 30 detik
-  setInterval(saveAssetPrices, 3600000); //simpan harga 30detik 1x
+  setInterval(() => {
+    houses.forEach((house) => {
+      const fluctuation = Math.random() * 0.2 - 0.1; // Fluktuasi ±10%
+      house.price = Math.max(1000, Math.floor(house.price * (1 + fluctuation))); // Harga minimum $1000
+    });
+  
+    console.log("🏠 Harga rumah diperbarui:", houses);
+  }, 3600000); // Perbarui setiap 1 jam
+  setInterval(fetchRealTimePrices, 120000); 
+  setInterval(() => {
+    fetchRealTimePrices(); // Update harga currency setiap 6 jam
+  }, 21600000); // 6 jam
   setInterval(() => {
     try {
       handleWelcome.checkReminders(sock);
@@ -2502,7 +3216,10 @@ if (body.startsWith(".a")) {
       console.error("❌ Error saat memeriksa pengingat:", error);
     }
   }, 60000); // Periksa setiap 1 menit
-  
+  module.exports = {
+    saveUserData,
+    userData, // Jika diperlukan untuk manipulasi data pengguna
+  };
 }
 
 startBot();

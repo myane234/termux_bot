@@ -39,11 +39,14 @@ module.exports = async function handleWelcome(sock, update, welcomeConfig) {
   for (const participant of participants) {
     const tag = `@${participant.split("@")[0]}`;
     let message = "";
-    let profilePictureUrl = "https://via.placeholder.com/150";
+    let profilePictureUrl = "https://i.pinimg.com/736x/02/90/f3/0290f30c0e7ce04ba60f863b49ac21e8.jpg"; // Gambar default
 
     try {
+      // Coba ambil foto profil pengguna
       profilePictureUrl = await sock.profilePictureUrl(participant, "image");
-    } catch {}
+    } catch (error) {
+      console.log(`⚠️ Tidak dapat mengambil foto profil untuk ${tag}, menggunakan gambar default.`);
+    }
 
     if (action === "add") {
       const welcomeText = config.text || `
